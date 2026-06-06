@@ -395,35 +395,11 @@ function App() {
   };
 
   const moveRunawayNo = () => {
-    if (typeof window === "undefined") return;
-
-    const buttonWidth = 150;
-    const buttonHeight = 62;
-    const edgePadding = 26;
-    const topPadding = 76;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const maxX = Math.max(edgePadding, viewportWidth - buttonWidth - edgePadding);
-    const maxY = Math.max(topPadding, viewportHeight - buttonHeight - edgePadding);
-
     setRunawayPosition((current) => {
-      const moves = current.moves + 1;
-      const zones = [
-        { x: maxX, y: topPadding },
-        { x: edgePadding, y: Math.round(viewportHeight * 0.42) },
-        { x: maxX, y: Math.round(viewportHeight * 0.55) },
-        { x: Math.round(viewportWidth * 0.36), y: maxY },
-        { x: edgePadding, y: maxY },
-        { x: Math.round(viewportWidth * 0.54), y: topPadding },
-      ];
-      const zone = zones[(moves - 1) % zones.length];
-
       return {
+        ...current,
         active: true,
-        x: Math.min(maxX, Math.max(edgePadding, zone.x)),
-        y: Math.min(maxY, Math.max(topPadding, zone.y)),
-        rotation: Math.round(Math.random() * 22 - 11),
-        moves,
+        moves: current.moves + 1,
       };
     });
   };
@@ -494,6 +470,19 @@ function App() {
           <span>Reset</span>
         </button>
       </header>
+
+      {plan.step === 0 && runawayPosition.active && (
+        <button
+          className="runaway-button roaming"
+          type="button"
+          aria-label="No, broken heart"
+          onMouseEnter={moveRunawayNo}
+          onFocus={moveRunawayNo}
+          onClick={moveRunawayNo}
+        >
+          No <span aria-hidden="true">💔</span>
+        </button>
+      )}
 
       <section className={`planner-shell ${isFinal ? "final-shell" : ""}`}>
         {!isFinal && (
@@ -604,25 +593,18 @@ function IntroStep({ plan, runawayPosition, onChange, onYes, onNoDodge }) {
         <button className="yes-button" type="button" onClick={onYes}>
           Yes <Heart size={20} fill="currentColor" />
         </button>
-        <button
-          className={`runaway-button ${runawayPosition.active ? "roaming" : ""}`}
-          type="button"
-          aria-label="No, broken heart"
-          onMouseEnter={onNoDodge}
-          onFocus={onNoDodge}
-          onClick={onNoDodge}
-          style={
-            runawayPosition.active
-              ? {
-                  left: `${runawayPosition.x}px`,
-                  top: `${runawayPosition.y}px`,
-                  transform: `rotate(${runawayPosition.rotation}deg)`,
-                }
-              : undefined
-          }
-        >
-          No <span aria-hidden="true">💔</span>
-        </button>
+        {!runawayPosition.active && (
+          <button
+            className="runaway-button"
+            type="button"
+            aria-label="No, broken heart"
+            onMouseEnter={onNoDodge}
+            onFocus={onNoDodge}
+            onClick={onNoDodge}
+          >
+            No <span aria-hidden="true">💔</span>
+          </button>
+        )}
       </div>
     </section>
   );
