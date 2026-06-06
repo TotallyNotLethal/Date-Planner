@@ -3,15 +3,23 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
+  ExternalLink,
   Heart,
+  Mail,
   Music,
+  Phone,
   RotateCcw,
+  Send,
   Sparkles,
+  UserRound,
   VolumeX,
 } from "lucide-react";
 
 const STORAGE_KEY = "date-planner-valentine-v2";
+const INVITE_STORAGE_KEY = "date-planner-invite-form-v1";
+const INVITE_PARAM = "invite";
 const TOTAL_STEPS = 6;
 
 const timeOptions = [
@@ -69,9 +77,97 @@ const defaultRunawayPosition = {
   moves: 0,
 };
 
-function getInitialState() {
+const emptyInviteForm = {
+  senderName: "",
+  senderEmail: "",
+  senderPhone: "",
+  recipientName: "",
+};
+
+function cleanInviteText(value, maxLength = 140) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, maxLength) : "";
+}
+
+function normalizeInvitePayload(payload = {}) {
+  return {
+    senderName: cleanInviteText(payload.senderName),
+    senderEmail: cleanInviteText(payload.senderEmail, 180).toLowerCase(),
+    senderPhone: cleanInviteText(payload.senderPhone, 60),
+    recipientName: cleanInviteText(payload.recipientName),
+    inviteId: cleanInviteText(payload.inviteId, 80),
+    createdAt: cleanInviteText(payload.createdAt, 40),
+  };
+}
+
+function encodeInvitePayload(payload) {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+
+  return window
+    .btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeInvitePayload(value) {
+  if (!value || typeof window === "undefined") return null;
+
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    const binary = window.atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(bytes));
+    const invite = normalizeInvitePayload(payload);
+
+    if (!invite.senderName || !invite.senderEmail || !invite.recipientName) {
+      return null;
+    }
+
+    return invite;
+  } catch {
+    return null;
+  }
+}
+
+function getInviteFromUrl() {
+  if (typeof window === "undefined") return null;
+  return decodeInvitePayload(new URLSearchParams(window.location.search).get(INVITE_PARAM));
+}
+
+function getSavedInviteForm() {
+  if (typeof window === "undefined") {
+    return emptyInviteForm;
+  }
+
+  try {
+    const saved = window.localStorage.getItem(INVITE_STORAGE_KEY);
+    return saved ? { ...emptyInviteForm, ...normalizeInvitePayload(JSON.parse(saved)) } : emptyInviteForm;
+  } catch {
+    return emptyInviteForm;
+  }
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function getInitialState(invite = getInviteFromUrl()) {
   if (typeof window === "undefined") {
     return defaultState;
+  }
+
+  if (invite) {
+    return {
+      ...defaultState,
+      inviterName: invite.senderName || defaultState.inviterName,
+      guestName: invite.recipientName || defaultState.guestName,
+    };
   }
 
   try {
@@ -142,6 +238,61 @@ function getCompatibilityScore(plan) {
   const names = `${plan.guestName}${plan.inviterName}${food.label}${activity.label}`;
   const sweetChaos = hashString(names) % 13;
   return Math.min(100, Math.max(70, Math.round(76 + plan.excitement * 0.14 + sweetChaos)));
+}
+
+function buildInviteUrl(payload) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set(INVITE_PARAM, encodeInvitePayload(payload));
+  return url.toString();
+}
+
+function getConfirmationKey(invite, plan) {
+  const identity = invite.inviteId || `${invite.senderEmail}-${invite.recipientName}`;
+  return `date-planner-confirmation-${hashString(
+    `${identity}-${plan.date}-${plan.time}-${plan.food}-${plan.activity}-${plan.excitement}`
+  )}`;
+}
+
+function buildConfirmationPayload({
+  invite,
+  plan,
+  selectedTime,
+  selectedFood,
+  selectedActivity,
+  compatibility,
+}) {
+  return {
+    confirmationId: getConfirmationKey(invite, plan),
+    senderName: invite.senderName,
+    senderEmail: invite.senderEmail,
+    senderPhone: invite.senderPhone,
+    recipientName: invite.recipientName,
+    inviterName: plan.inviterName || invite.senderName,
+    guestName: plan.guestName || invite.recipientName,
+    date: formatDate(plan.date, { weekday: undefined }),
+    fullDate: formatDate(plan.date),
+    rawDate: plan.date,
+    time: selectedTime.time,
+    timeDescription: selectedTime.description,
+    food: selectedFood.label,
+    foodEmoji: selectedFood.emoji,
+    activity: selectedActivity.label,
+    activityEmoji: selectedActivity.emoji,
+    excitement: plan.excitement,
+    excitementLabel: getExcitementLabel(plan.excitement),
+    compatibility,
+    pageUrl: typeof window === "undefined" ? "" : window.location.href,
+  };
+}
+
+function isLocalPreview() {
+  return (
+    import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+  );
 }
 
 function createMusicBoxLoop() {
@@ -404,7 +555,15 @@ async function downloadDateCard(plan) {
 }
 
 function App() {
-  const [plan, setPlan] = useState(getInitialState);
+  const initialInvite = useMemo(() => getInviteFromUrl(), []);
+  const [invite] = useState(initialInvite);
+  const [showSetup] = useState(!initialInvite);
+  const [senderForm, setSenderForm] = useState(getSavedInviteForm);
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [confirmationStatus, setConfirmationStatus] = useState("idle");
+  const [plan, setPlan] = useState(() => getInitialState(initialInvite));
   const [direction, setDirection] = useState("forward");
   const [now, setNow] = useState(new Date());
   const [musicOn, setMusicOn] = useState(true);
@@ -413,6 +572,7 @@ function App() {
   const audioRef = useRef(null);
   const lastSparkleRef = useRef(0);
   const lastRunawayMoveRef = useRef(0);
+  const confirmationSentRef = useRef(false);
 
   const selectedTime = useMemo(() => findOption(timeOptions, plan.time), [plan.time]);
   const selectedFood = useMemo(() => findOption(foodOptions, plan.food), [plan.food]);
@@ -424,6 +584,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
   }, [plan]);
+
+  useEffect(() => {
+    window.localStorage.setItem(INVITE_STORAGE_KEY, JSON.stringify(senderForm));
+  }, [senderForm]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30000);
@@ -456,6 +620,60 @@ function App() {
     };
   }, [musicOn]);
 
+  useEffect(() => {
+    if (!isFinal || !invite?.senderEmail || confirmationSentRef.current) {
+      return undefined;
+    }
+
+    const confirmationKey = getConfirmationKey(invite, plan);
+    if (window.localStorage.getItem(confirmationKey)) {
+      setConfirmationStatus("sent");
+      confirmationSentRef.current = true;
+      return undefined;
+    }
+
+    if (isLocalPreview()) {
+      setConfirmationStatus("preview");
+      confirmationSentRef.current = true;
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const payload = buildConfirmationPayload({
+      invite,
+      plan,
+      selectedTime,
+      selectedFood,
+      selectedActivity,
+      compatibility,
+    });
+
+    confirmationSentRef.current = true;
+    setConfirmationStatus("sending");
+
+    fetch("/api/send-confirmation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Email failed to send.");
+        }
+        window.localStorage.setItem(confirmationKey, "sent");
+        setConfirmationStatus("sent");
+      })
+      .catch((error) => {
+        if (error.name === "AbortError") return;
+        confirmationSentRef.current = false;
+        setConfirmationStatus("error");
+      });
+
+    return () => controller.abort();
+  }, [compatibility, invite, isFinal, plan, selectedActivity, selectedFood, selectedTime]);
+
   const updatePlan = (patch) => {
     setPlan((current) => ({ ...current, ...patch }));
   };
@@ -473,8 +691,56 @@ function App() {
 
   const reset = () => {
     setDirection("back");
-    setPlan(defaultState);
+    setPlan({
+      ...defaultState,
+      inviterName: invite?.senderName || defaultState.inviterName,
+      guestName: invite?.recipientName || defaultState.guestName,
+    });
     setRunawayPosition(defaultRunawayPosition);
+    setConfirmationStatus("idle");
+    confirmationSentRef.current = false;
+  };
+
+  const updateSenderForm = (field, value) => {
+    setSenderForm((current) => ({ ...current, [field]: value }));
+    setInviteError("");
+    setLinkCopied(false);
+  };
+
+  const generateInviteLink = (event) => {
+    event.preventDefault();
+    const normalized = normalizeInvitePayload(senderForm);
+
+    if (!normalized.senderName || !normalized.senderEmail || !normalized.senderPhone || !normalized.recipientName) {
+      setInviteError("Fill in your name, email, phone, and their name first.");
+      return;
+    }
+
+    if (!isValidEmail(normalized.senderEmail)) {
+      setInviteError("Use a real email so the confirmation can find you.");
+      return;
+    }
+
+    const payload = {
+      ...normalized,
+      inviteId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: new Date().toISOString(),
+    };
+
+    setInviteLink(buildInviteUrl(payload));
+    setInviteError("");
+    setLinkCopied(false);
+  };
+
+  const copyInviteLink = async () => {
+    if (!inviteLink) return;
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+    } catch {
+      setInviteError("Copy failed, but the link is right there to select.");
+    }
   };
 
   const moveRunawayNo = (event) => {
@@ -618,12 +884,29 @@ function App() {
           {musicOn ? <VolumeX size={18} /> : <Music size={18} />}
           <span>{musicOn ? "Mute" : "Music"}</span>
         </button>
-        <button className="icon-button" type="button" aria-label="Reset planner" onClick={reset}>
-          <RotateCcw size={18} />
-          <span>Reset</span>
-        </button>
+        {!showSetup && (
+          <button className="icon-button" type="button" aria-label="Reset planner" onClick={reset}>
+            <RotateCcw size={18} />
+            <span>Reset</span>
+          </button>
+        )}
       </header>
 
+      {showSetup ? (
+        <InviteSetup
+          form={senderForm}
+          inviteLink={inviteLink}
+          inviteError={inviteError}
+          linkCopied={linkCopied}
+          onChange={updateSenderForm}
+          onGenerate={generateInviteLink}
+          onCopy={copyInviteLink}
+          onOpen={() => {
+            window.location.href = inviteLink;
+          }}
+        />
+      ) : (
+        <>
       {plan.step === 0 && runawayPosition.active && (
         <button
           className="runaway-button roaming"
@@ -700,6 +983,8 @@ function App() {
               selectedActivity={selectedActivity}
               countdown={countdown}
               compatibility={compatibility}
+              invite={invite}
+              confirmationStatus={confirmationStatus}
               onDownload={() => downloadDateCard(plan)}
             />
           )}
@@ -718,7 +1003,121 @@ function App() {
           </nav>
         )}
       </section>
+        </>
+      )}
     </main>
+  );
+}
+
+function InviteSetup({
+  form,
+  inviteLink,
+  inviteError,
+  linkCopied,
+  onChange,
+  onGenerate,
+  onCopy,
+  onOpen,
+}) {
+  return (
+    <section className="invite-shell">
+      <div className="invite-card">
+        <div className="stamp invite-stamp">Sendable Invite ❤️</div>
+        <p className="tiny-script">make it official</p>
+        <h1>Build their date link</h1>
+
+        <form className="invite-form" onSubmit={onGenerate}>
+          <div className="invite-grid">
+            <label>
+              <span className="field-label">
+                <UserRound size={17} />
+                Your name
+              </span>
+              <input
+                value={form.senderName}
+                onChange={(event) => onChange("senderName", event.target.value)}
+                placeholder="Your name"
+                autoComplete="name"
+                required
+              />
+            </label>
+
+            <label>
+              <span className="field-label">
+                <Heart size={17} />
+                Their name
+              </span>
+              <input
+                value={form.recipientName}
+                onChange={(event) => onChange("recipientName", event.target.value)}
+                placeholder="Their name"
+                autoComplete="off"
+                required
+              />
+            </label>
+
+            <label>
+              <span className="field-label">
+                <Mail size={17} />
+                Your email
+              </span>
+              <input
+                type="email"
+                value={form.senderEmail}
+                onChange={(event) => onChange("senderEmail", event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            <label>
+              <span className="field-label">
+                <Phone size={17} />
+                Your phone
+              </span>
+              <input
+                type="tel"
+                value={form.senderPhone}
+                onChange={(event) => onChange("senderPhone", event.target.value)}
+                placeholder="(555) 123-4567"
+                autoComplete="tel"
+                required
+              />
+            </label>
+          </div>
+
+          {inviteError && <p className="form-error">{inviteError}</p>}
+
+          <button className="primary-button invite-submit" type="submit">
+            <Send size={18} />
+            Generate Invite Link
+          </button>
+        </form>
+
+        {inviteLink && (
+          <div className="generated-link-panel" aria-live="polite">
+            <label>
+              <span className="field-label">
+                <Mail size={17} />
+                Invite link
+              </span>
+              <input readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} />
+            </label>
+            <div className="invite-actions">
+              <button className="secondary-button" type="button" onClick={onCopy}>
+                <Copy size={18} />
+                {linkCopied ? "Copied" : "Copy Link"}
+              </button>
+              <button className="primary-button" type="button" onClick={onOpen}>
+                <ExternalLink size={18} />
+                Open Planner
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -877,6 +1276,15 @@ function ExcitementStep({ plan, compatibility, onChange }) {
   );
 }
 
+function getConfirmationStatusText(status, invite) {
+  if (!invite?.senderEmail) return "";
+  if (status === "sending") return `Sending confirmation to ${invite.senderName}...`;
+  if (status === "sent") return `Confirmation sent to ${invite.senderEmail}.`;
+  if (status === "preview") return "Local preview: the confirmation email will send on Vercel.";
+  if (status === "error") return "Confirmation email needs Resend setup on Vercel.";
+  return "Confirmation email ready for the final reveal.";
+}
+
 function FinalStep({
   plan,
   selectedTime,
@@ -884,8 +1292,12 @@ function FinalStep({
   selectedActivity,
   countdown,
   compatibility,
+  invite,
+  confirmationStatus,
   onDownload,
 }) {
+  const confirmationMessage = getConfirmationStatusText(confirmationStatus, invite);
+
   return (
     <section className="final-step">
       <div className="final-heading">
@@ -959,6 +1371,12 @@ function FinalStep({
             Save Our Date ❤️
           </button>
         </div>
+        {confirmationMessage && (
+          <div className={`confirmation-note ${confirmationStatus}`}>
+            <Mail size={17} />
+            <span>{confirmationMessage}</span>
+          </div>
+        )}
       </div>
     </section>
   );

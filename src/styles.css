@@ -241,6 +241,106 @@ button {
   padding: 0;
 }
 
+.invite-shell {
+  position: relative;
+  z-index: 2;
+  width: min(920px, 100%);
+}
+
+.invite-card {
+  position: relative;
+  min-height: 560px;
+  display: grid;
+  align-content: center;
+  gap: 22px;
+  padding: 44px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(255, 255, 255, 0.88), transparent 26%),
+    radial-gradient(circle at 85% 8%, rgba(255, 217, 121, 0.38), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 233, 243, 0.76));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(24px);
+}
+
+.invite-card::after {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
+  content: "✦";
+  color: rgba(255, 217, 121, 0.92);
+  font-size: 34px;
+  animation: twinkle 1.7s ease-in-out infinite;
+}
+
+.invite-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.invite-card h1 {
+  max-width: 680px;
+}
+
+.invite-stamp {
+  top: 24px;
+  right: 26px;
+}
+
+.invite-form {
+  display: grid;
+  gap: 18px;
+}
+
+.invite-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-label svg {
+  color: var(--rose-500);
+}
+
+.invite-submit {
+  justify-self: start;
+  min-width: 232px;
+}
+
+.form-error {
+  margin: 0;
+  color: #9f123f;
+  font-weight: 800;
+}
+
+.generated-link-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 18px 40px rgba(145, 22, 72, 0.12);
+}
+
+.generated-link-panel input {
+  font-size: 0.9rem;
+}
+
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .progress-wrap {
   display: grid;
   gap: 10px;
@@ -843,6 +943,28 @@ select {
   width: 100%;
 }
 
+.confirmation-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: var(--rose-700);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 14px 30px rgba(145, 22, 72, 0.1);
+  font-weight: 800;
+}
+
+.confirmation-note svg {
+  flex: 0 0 auto;
+  color: var(--rose-500);
+}
+
+.confirmation-note.error {
+  color: #9f123f;
+}
+
 @keyframes floatHeart {
   0%,
   100% {
@@ -977,6 +1099,12 @@ select {
     border-radius: 26px;
   }
 
+  .invite-card {
+    min-height: auto;
+    padding: 34px 18px 24px;
+    border-radius: 26px;
+  }
+
   .top-bar {
     left: 12px;
     right: 12px;
@@ -989,8 +1117,14 @@ select {
   }
 
   .name-grid,
+  .invite-grid,
   .final-step {
     grid-template-columns: 1fr;
+  }
+
+  .invite-submit,
+  .invite-actions button {
+    width: 100%;
   }
 
   .choice-grid {
