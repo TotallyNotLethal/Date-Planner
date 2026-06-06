@@ -102,13 +102,25 @@ button {
 
 .rising-hearts span {
   position: absolute;
-  left: calc((var(--i) * 47px + 2vw) % 100vw);
-  bottom: -76px;
-  color: rgba(180, 21, 84, 0.46);
-  font-size: calc(28px + (var(--i) % 7) * 8px);
-  filter: drop-shadow(0 12px 22px rgba(255, 83, 145, 0.3));
-  animation: riseHeart calc(10s + (var(--i) % 7) * 0.9s) linear infinite;
-  animation-delay: calc(var(--i) * -0.65s);
+  left: var(--heart-x);
+  bottom: -90px;
+  width: 1em;
+  height: 1em;
+  color: rgba(213, 28, 103, 0.76);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: var(--heart-size);
+  line-height: 1;
+  opacity: 0.92;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.8),
+    0 10px 24px rgba(178, 20, 82, 0.34);
+  animation: riseHeart var(--heart-duration) linear infinite;
+  animation-delay: var(--heart-delay);
+}
+
+.rising-hearts span::before,
+.postcard-rising-hearts span::before {
+  content: "♥";
 }
 
 .cursor-sparkles span {
@@ -639,13 +651,18 @@ select {
 
 .postcard-rising-hearts span {
   position: absolute;
-  left: calc((var(--i) * 59px) % 100%);
-  bottom: -52px;
-  color: rgba(180, 21, 84, 0.58);
-  font-size: calc(30px + (var(--i) % 5) * 9px);
-  filter: drop-shadow(0 12px 22px rgba(255, 72, 136, 0.32));
-  animation: riseHeart calc(7s + (var(--i) % 5) * 0.75s) linear infinite;
-  animation-delay: calc(var(--i) * -0.48s);
+  left: var(--heart-x);
+  bottom: -60px;
+  color: rgba(202, 20, 92, 0.7);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: var(--heart-size);
+  line-height: 1;
+  opacity: 0.9;
+  text-shadow:
+    0 0 12px rgba(255, 255, 255, 0.82),
+    0 10px 22px rgba(178, 20, 82, 0.3);
+  animation: riseHeart var(--heart-duration) linear infinite;
+  animation-delay: var(--heart-delay);
 }
 
 .postcard {
@@ -842,17 +859,17 @@ select {
     transform: translate3d(0, 0, 0) rotate(-10deg) scale(0.78);
   }
   12% {
-    opacity: 0.55;
+    opacity: 0.95;
   }
   50% {
-    transform: translate3d(calc(((var(--i) % 5) - 2) * 18px), -52vh, 0) rotate(12deg) scale(1);
+    transform: translate3d(var(--heart-drift, 0), -52vh, 0) rotate(12deg) scale(1);
   }
   88% {
-    opacity: 0.42;
+    opacity: 0.8;
   }
   100% {
     opacity: 0;
-    transform: translate3d(calc(((var(--i) % 7) - 3) * 22px), -108vh, 0) rotate(-18deg) scale(1.12);
+    transform: translate3d(var(--heart-drift-end, 0), -108vh, 0) rotate(-18deg) scale(1.12);
   }
 }
 

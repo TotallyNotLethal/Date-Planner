@@ -144,6 +144,101 @@ function getCompatibilityScore(plan) {
   return Math.min(100, Math.max(70, Math.round(76 + plan.excitement * 0.14 + sweetChaos)));
 }
 
+function createMusicBoxLoop() {
+  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextConstructor) {
+    return { stop: () => {} };
+  }
+
+  const context = new AudioContextConstructor();
+  const master = context.createGain();
+  const filter = context.createBiquadFilter();
+  const delay = context.createDelay();
+  const delayGain = context.createGain();
+  const feedback = context.createGain();
+  const melody = [
+    659.25, 783.99, 880, 783.99, 659.25, 587.33, 659.25, null,
+    523.25, 659.25, 783.99, 659.25, 587.33, 523.25, 587.33, null,
+    659.25, 783.99, 987.77, 880, 783.99, 659.25, 587.33, 523.25,
+    587.33, 659.25, 783.99, 659.25, 523.25, null, 392, null,
+  ];
+  const bass = [261.63, null, 329.63, null, 349.23, null, 392, null];
+  let step = 0;
+  let intervalId;
+  let stopped = false;
+
+  master.gain.value = 0.07;
+  filter.type = "lowpass";
+  filter.frequency.value = 2200;
+  delay.delayTime.value = 0.24;
+  delayGain.gain.value = 0.16;
+  feedback.gain.value = 0.18;
+
+  filter.connect(master);
+  filter.connect(delay);
+  delay.connect(delayGain);
+  delayGain.connect(master);
+  delay.connect(feedback);
+  feedback.connect(delay);
+  master.connect(context.destination);
+
+  const playNote = (frequency, duration = 0.24, volume = 0.16) => {
+    if (!frequency || stopped) return;
+
+    const now = context.currentTime + 0.015;
+    const oscillator = context.createOscillator();
+    const shimmer = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    shimmer.type = "triangle";
+    shimmer.frequency.value = frequency * 2;
+    shimmer.detune.value = 5;
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    oscillator.connect(gain);
+    shimmer.connect(gain);
+    gain.connect(filter);
+    oscillator.start(now);
+    shimmer.start(now);
+    oscillator.stop(now + duration + 0.04);
+    shimmer.stop(now + duration + 0.04);
+  };
+
+  const tick = () => {
+    playNote(melody[step % melody.length], 0.28, 0.13);
+    if (step % 4 === 0) {
+      playNote(bass[Math.floor(step / 4) % bass.length], 0.42, 0.07);
+    }
+    step += 1;
+  };
+
+  const startLoop = () => {
+    if (intervalId || stopped) return;
+    tick();
+    intervalId = window.setInterval(tick, 285);
+  };
+
+  if (context.state === "suspended") {
+    context.resume().then(startLoop).catch(() => {});
+  } else {
+    startLoop();
+  }
+
+  return {
+    stop: () => {
+      stopped = true;
+      window.clearInterval(intervalId);
+      master.gain.setTargetAtTime(0, context.currentTime, 0.05);
+      window.setTimeout(() => context.close().catch(() => {}), 180);
+    },
+  };
+}
+
 function drawRoundedRect(ctx, x, y, width, height, radius) {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -312,7 +407,7 @@ function App() {
   const [plan, setPlan] = useState(getInitialState);
   const [direction, setDirection] = useState("forward");
   const [now, setNow] = useState(new Date());
-  const [musicOn, setMusicOn] = useState(false);
+  const [musicOn, setMusicOn] = useState(true);
   const [sparkles, setSparkles] = useState([]);
   const [runawayPosition, setRunawayPosition] = useState(defaultRunawayPosition);
   const audioRef = useRef(null);
@@ -336,41 +431,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!musicOn) {
+    const stopMusic = () => {
       audioRef.current?.stop();
       audioRef.current = null;
+    };
+
+    if (!musicOn) {
+      stopMusic();
       return undefined;
     }
 
-    const context = new AudioContext();
-    const gain = context.createGain();
-    gain.gain.value = 0.025;
-    gain.connect(context.destination);
-
-    const notes = [261.63, 329.63, 392.0];
-    const oscillators = notes.map((frequency, index) => {
-      const oscillator = context.createOscillator();
-      oscillator.type = index === 0 ? "sine" : "triangle";
-      oscillator.frequency.value = frequency;
-      oscillator.detune.value = index * 3;
-      oscillator.connect(gain);
-      oscillator.start();
-      return oscillator;
-    });
-
-    audioRef.current = {
-      stop: () => {
-        gain.gain.setTargetAtTime(0, context.currentTime, 0.06);
-        window.setTimeout(() => {
-          oscillators.forEach((oscillator) => oscillator.stop());
-          context.close();
-        }, 180);
-      },
+    const startMusic = () => {
+      if (!audioRef.current) {
+        audioRef.current = createMusicBoxLoop();
+      }
     };
 
+    window.addEventListener("pointerdown", startMusic, true);
+    window.addEventListener("keydown", startMusic);
+
     return () => {
-      audioRef.current?.stop();
-      audioRef.current = null;
+      window.removeEventListener("pointerdown", startMusic, true);
+      window.removeEventListener("keydown", startMusic);
     };
   }, [musicOn]);
 
@@ -484,10 +566,18 @@ function App() {
       </div>
 
       <div className="rising-hearts" aria-hidden="true">
-        {Array.from({ length: 34 }, (_, index) => (
-          <span key={index} style={{ "--i": index }}>
-            {index % 5 === 0 ? "💗" : index % 3 === 0 ? "💕" : "♥"}
-          </span>
+        {Array.from({ length: 78 }, (_, index) => (
+          <span
+            key={index}
+            style={{
+              "--heart-x": `${(index * 37) % 100}vw`,
+              "--heart-size": `${26 + (index % 8) * 7}px`,
+              "--heart-duration": `${8 + (index % 7) * 0.65}s`,
+              "--heart-delay": `${index * -0.32}s`,
+              "--heart-drift": `${((index % 9) - 4) * 18}px`,
+              "--heart-drift-end": `${((index % 11) - 5) * 22}px`,
+            }}
+          />
         ))}
       </div>
 
@@ -514,7 +604,16 @@ function App() {
           className="icon-button"
           type="button"
           aria-label={musicOn ? "Mute music" : "Play music"}
-          onClick={() => setMusicOn((value) => !value)}
+          onClick={() => {
+            if (musicOn) {
+              setMusicOn(false);
+            } else {
+              setMusicOn(true);
+              if (!audioRef.current) {
+                audioRef.current = createMusicBoxLoop();
+              }
+            }
+          }}
         >
           {musicOn ? <VolumeX size={18} /> : <Music size={18} />}
           <span>{musicOn ? "Mute" : "Music"}</span>
@@ -796,10 +895,18 @@ function FinalStep({
 
       <div className="postcard-wrap">
         <div className="postcard-rising-hearts" aria-hidden="true">
-          {Array.from({ length: 18 }, (_, index) => (
-            <span key={index} style={{ "--i": index }}>
-              {index % 3 === 0 ? "💕" : "♥"}
-            </span>
+          {Array.from({ length: 30 }, (_, index) => (
+            <span
+              key={index}
+              style={{
+                "--heart-x": `${(index * 43) % 100}%`,
+                "--heart-size": `${28 + (index % 6) * 8}px`,
+                "--heart-duration": `${6.5 + (index % 5) * 0.55}s`,
+                "--heart-delay": `${index * -0.28}s`,
+                "--heart-drift": `${((index % 7) - 3) * 14}px`,
+                "--heart-drift-end": `${((index % 9) - 4) * 18}px`,
+              }}
+            />
           ))}
         </div>
         <article className="postcard" aria-label="Official date invitation postcard">
