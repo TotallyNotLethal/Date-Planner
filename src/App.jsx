@@ -317,6 +317,7 @@ function App() {
   const [runawayPosition, setRunawayPosition] = useState(defaultRunawayPosition);
   const audioRef = useRef(null);
   const lastSparkleRef = useRef(0);
+  const lastRunawayMoveRef = useRef(0);
 
   const selectedTime = useMemo(() => findOption(timeOptions, plan.time), [plan.time]);
   const selectedFood = useMemo(() => findOption(foodOptions, plan.food), [plan.food]);
@@ -397,6 +398,10 @@ function App() {
   const moveRunawayNo = (event) => {
     if (typeof window === "undefined") return;
 
+    const now = Date.now();
+    if (now - lastRunawayMoveRef.current < 170) return;
+    lastRunawayMoveRef.current = now;
+
     const buttonRect = event?.currentTarget?.getBoundingClientRect?.();
     const buttonWidth = buttonRect?.width ?? 124;
     const buttonHeight = buttonRect?.height ?? 54;
@@ -411,25 +416,36 @@ function App() {
     setRunawayPosition((current) => {
       const currentX = current.active ? current.x : buttonRect?.left ?? window.innerWidth / 2;
       const currentY = current.active ? current.y : buttonRect?.top ?? window.innerHeight / 2;
-      const safeSpots = [
-        { x: maxX, y: minY },
-        { x: minX, y: Math.round(window.innerHeight * 0.24) },
-        { x: maxX, y: Math.round(window.innerHeight * 0.56) },
-        { x: minX, y: maxY },
-        { x: Math.round(window.innerWidth * 0.5), y: maxY },
-        { x: Math.round(window.innerWidth * 0.54), y: minY },
-      ]
-        .map((spot) => ({
-          x: clamp(spot.x, minX, maxX),
-          y: clamp(spot.y, minY, maxY),
-        }))
-        .sort((a, b) => {
-          const distanceA = Math.hypot(a.x + buttonWidth / 2 - pointerX, a.y + buttonHeight / 2 - pointerY);
-          const distanceB = Math.hypot(b.x + buttonWidth / 2 - pointerX, b.y + buttonHeight / 2 - pointerY);
-          return distanceB - distanceA;
-        });
+      const centerX = currentX + buttonWidth / 2;
+      const centerY = currentY + buttonHeight / 2;
+      const baseAngle =
+        Math.hypot(centerX - pointerX, centerY - pointerY) < 4
+          ? Math.random() * Math.PI * 2
+          : Math.atan2(centerY - pointerY, centerX - pointerX);
+      const candidates = Array.from({ length: 18 }, (_, index) => {
+        const directionBias = (index - 8.5) * 0.18;
+        const randomNudge = (Math.random() - 0.5) * 0.55;
+        const angle = baseAngle + directionBias + randomNudge;
+        const distance = 145 + Math.random() * 40;
+        const rawX = currentX + Math.cos(angle) * distance;
+        const rawY = currentY + Math.sin(angle) * distance;
+        const x = clamp(rawX, minX, maxX);
+        const y = clamp(rawY, minY, maxY);
+        const movement = Math.hypot(x - currentX, y - currentY);
+        const pointerDistance = Math.hypot(x + buttonWidth / 2 - pointerX, y + buttonHeight / 2 - pointerY);
+        const edgePenalty = Math.abs(rawX - x) + Math.abs(rawY - y);
+
+        return {
+          x,
+          y,
+          score: pointerDistance + movement * 0.35 - edgePenalty * 1.8,
+          movement,
+          pointerDistance,
+        };
+      }).sort((a, b) => b.score - a.score);
       const target =
-        safeSpots.find((spot) => Math.hypot(spot.x - currentX, spot.y - currentY) > 110) ?? safeSpots[0];
+        candidates.find((candidate) => candidate.movement >= 105 && candidate.pointerDistance >= 135) ??
+        candidates[0];
 
       return {
         ...current,
