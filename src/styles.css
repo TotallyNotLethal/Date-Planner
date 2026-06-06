@@ -383,15 +383,15 @@ button:focus-visible {
 .runaway-button.roaming {
   position: fixed;
   z-index: 20;
-  left: calc(100vw - 152px);
-  top: 86px;
   width: 124px;
   min-width: 124px;
   color: #8f123f;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 18px 40px rgba(145, 22, 72, 0.22);
-  animation: roamNoButton 7.5s ease-in-out infinite;
   transition:
+    left 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    top 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 180ms ease,
     background 180ms ease;
 }
@@ -853,40 +853,6 @@ select {
   100% {
     opacity: 0;
     transform: translate3d(calc(((var(--i) % 7) - 3) * 22px), -108vh, 0) rotate(-18deg) scale(1.12);
-  }
-}
-
-@keyframes roamNoButton {
-  0%,
-  100% {
-    left: calc(100vw - 152px);
-    top: 86px;
-    transform: rotate(7deg);
-  }
-  18% {
-    left: 24px;
-    top: 22vh;
-    transform: rotate(-9deg);
-  }
-  36% {
-    left: calc(100vw - 152px);
-    top: 55vh;
-    transform: rotate(10deg);
-  }
-  54% {
-    left: 18vw;
-    top: calc(100vh - 92px);
-    transform: rotate(-7deg);
-  }
-  72% {
-    left: 24px;
-    top: calc(100vh - 92px);
-    transform: rotate(8deg);
-  }
-  88% {
-    left: 56vw;
-    top: 92px;
-    transform: rotate(-6deg);
   }
 }
 

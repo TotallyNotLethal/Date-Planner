@@ -394,11 +394,49 @@ function App() {
     setRunawayPosition(defaultRunawayPosition);
   };
 
-  const moveRunawayNo = () => {
+  const moveRunawayNo = (event) => {
+    if (typeof window === "undefined") return;
+
+    const buttonRect = event?.currentTarget?.getBoundingClientRect?.();
+    const buttonWidth = buttonRect?.width ?? 124;
+    const buttonHeight = buttonRect?.height ?? 54;
+    const minX = 18;
+    const minY = 78;
+    const maxX = Math.max(minX, window.innerWidth - buttonWidth - 18);
+    const maxY = Math.max(minY, window.innerHeight - buttonHeight - 18);
+    const pointerX = event?.clientX ?? (buttonRect ? buttonRect.left + buttonWidth / 2 : window.innerWidth / 2);
+    const pointerY = event?.clientY ?? (buttonRect ? buttonRect.top + buttonHeight / 2 : window.innerHeight / 2);
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
     setRunawayPosition((current) => {
+      const currentX = current.active ? current.x : buttonRect?.left ?? window.innerWidth / 2;
+      const currentY = current.active ? current.y : buttonRect?.top ?? window.innerHeight / 2;
+      const safeSpots = [
+        { x: maxX, y: minY },
+        { x: minX, y: Math.round(window.innerHeight * 0.24) },
+        { x: maxX, y: Math.round(window.innerHeight * 0.56) },
+        { x: minX, y: maxY },
+        { x: Math.round(window.innerWidth * 0.5), y: maxY },
+        { x: Math.round(window.innerWidth * 0.54), y: minY },
+      ]
+        .map((spot) => ({
+          x: clamp(spot.x, minX, maxX),
+          y: clamp(spot.y, minY, maxY),
+        }))
+        .sort((a, b) => {
+          const distanceA = Math.hypot(a.x + buttonWidth / 2 - pointerX, a.y + buttonHeight / 2 - pointerY);
+          const distanceB = Math.hypot(b.x + buttonWidth / 2 - pointerX, b.y + buttonHeight / 2 - pointerY);
+          return distanceB - distanceA;
+        });
+      const target =
+        safeSpots.find((spot) => Math.hypot(spot.x - currentX, spot.y - currentY) > 110) ?? safeSpots[0];
+
       return {
         ...current,
         active: true,
+        x: target.x,
+        y: target.y,
+        rotation: Math.round(Math.random() * 20 - 10),
         moves: current.moves + 1,
       };
     });
@@ -477,8 +515,14 @@ function App() {
           type="button"
           aria-label="No, broken heart"
           onMouseEnter={moveRunawayNo}
+          onPointerMove={moveRunawayNo}
           onFocus={moveRunawayNo}
           onClick={moveRunawayNo}
+          style={{
+            left: `${runawayPosition.x}px`,
+            top: `${runawayPosition.y}px`,
+            transform: `rotate(${runawayPosition.rotation}deg)`,
+          }}
         >
           No <span aria-hidden="true">💔</span>
         </button>
@@ -599,6 +643,7 @@ function IntroStep({ plan, runawayPosition, onChange, onYes, onNoDodge }) {
             type="button"
             aria-label="No, broken heart"
             onMouseEnter={onNoDodge}
+            onPointerMove={onNoDodge}
             onFocus={onNoDodge}
             onClick={onNoDodge}
           >
